@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Smart BMI Library</title>
+    <title>Smart BMI Management</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
+    <script src="https://unpkg.com/mqtt@5.0.0/dist/mqtt.min.js"></script>
+    
     <style>
- * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Quicksand', sans-serif; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Quicksand', sans-serif; }
         body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #000; overflow: hidden; }
         .animated-bg { position: absolute; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; gap: 2px; flex-wrap: wrap; overflow: hidden; z-index: -1; }
         .animated-bg::before { content: ''; position: absolute; width: 100%; height: 100%; background: linear-gradient(#000, #f00, #000); animation: animate 5s linear infinite; }
@@ -23,7 +25,6 @@
         .form-control::placeholder { color: rgba(255, 255, 255, 0.7); }
         .btn-danger { background: #f00; border: none; transition: all 0.3s ease; }
         .btn-danger:hover { transform: scale(1.1); box-shadow: 0 0 15px rgba(255, 0, 0, 0.7); background: #ff3333; }
-        .hidden { display: none; }
         .error-message { color: #ff6b6b; font-size: 0.8rem; margin-top: -0.5rem; margin-bottom: 0.5rem; animation: shake 0.5s ease; }
         @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
     </style>
@@ -47,6 +48,76 @@
     </div>
 
     <script>
+        const mqttClient = mqtt.connect('ws://broker.emqx.io:8083/mqtt');
+        let latestHeight = null;
+        let latestWeight = null;
+        let isMqttConnected = false;
+        let mqttInterval;
+
+        // MQTT Client Setup
+        mqttClient.on('connect', function () {
+            console.log('Connected to MQTT Broker via WebSocket');
+            isMqttConnected = true;
+            mqttClient.subscribe('bmi/weight', (err) => { if (err) console.error('Weight subscription error:', err); });
+            mqttClient.subscribe('bmi/height', (err) => { if (err) console.error('Height subscription error:', err); });
+            startMqttPolling();
+        });
+
+        mqttClient.on('message', function (topic, message) {
+            const payload = parseFloat(message.toString()).toFixed(2);
+            if (topic === 'bmi/weight') {
+                latestWeight = payload;
+            } else if (topic === 'bmi/height') {
+                latestHeight = payload;
+            }
+        });
+
+        mqttClient.on('error', function (err) {
+            console.error('MQTT Error:', err);
+            isMqttConnected = false;
+            clearInterval(mqttInterval);
+        });
+
+        mqttClient.on('offline', function () {
+            console.log('MQTT Client Offline');
+            isMqttConnected = false;
+            clearInterval(mqttInterval);
+        });
+
+        // Poll MQTT data every 5 seconds when connected
+        function startMqttPolling() {
+            clearInterval(mqttInterval); // Clear any existing interval
+            mqttInterval = setInterval(() => {
+                if (isMqttConnected && (latestHeight !== null || latestWeight !== null)) {
+                    updateFormWithMqttData();
+                }
+            }, 5000);
+        }
+
+        function updateFormWithMqttData() {
+            if (latestHeight !== null) {
+                document.getElementById('userHeight').value = latestHeight;
+            }
+            if (latestWeight !== null) {
+                document.getElementById('userWeight').value = latestWeight;
+            }
+        }
+
+        // BMI Logic
+        let bmiMeasurements = JSON.parse(localStorage.getItem("bmiMeasurements")) || [];
+
+        document.addEventListener("DOMContentLoaded", function() {
+            let latest = bmiMeasurements[bmiMeasurements.length - 1];
+            if (latest) {
+                document.getElementById("userName").value = latest.name;
+                document.getElementById("userAge").value = latest.age;
+                if (!isMqttConnected) {
+                    document.getElementById("userHeight").value = latest.height;
+                    document.getElementById("userWeight").value = latest.weight;
+                }
+            }
+        });
+
         function calculateBMI() {
             // Reset error messages
             document.getElementById("ageError").classList.add("hidden");
@@ -84,15 +155,28 @@
 
             if (!isValid) return;
 
-            // Store the measurement and redirect
-            const measurement = {
-                name: userName,
-                age: userAge,
-                height: height,
-                weight: weight
+            // Calculate BMI and redirect to dashboard
+            const heightInMeters = height / 100;
+            const bmi = (weight / (heightInMeters * heightInMeters)).toFixed(1);
+            let category = "";
+            if (bmi < 18.5) category = "Underweight";
+            else if (bmi < 25) category = "Normal Weight";
+            else if (bmi < 30) category = "Overweight";
+            else category = "Obese";
+
+            const measurement = { 
+                name: userName, 
+                age: userAge.toString(), 
+                height: height.toString(), 
+                weight: weight.toString(), 
+                bmi: bmi, 
+                category: category 
             };
-            localStorage.setItem("latestMeasurement", JSON.stringify(measurement));
-            window.location.href = "dashboard.html";
+            bmiMeasurements.push(measurement);
+            localStorage.setItem("bmiMeasurements", JSON.stringify(bmiMeasurements));
+
+            // Redirect to dashboard.html with the latest measurement
+            window.location.href = `dashboard.html`;
         }
     </script>
 </body>
