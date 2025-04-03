@@ -16,32 +16,30 @@
         @keyframes animate { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
         .signin { position: relative; width: 450px; background: rgba(34, 34, 34, 0.9); z-index: 1000; padding: 50px; border-radius: 15px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); animation: slideIn 1s ease-out; }
         @keyframes slideIn { from { transform: translateY(-100vh); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .signin h3 { font-size: 1.5em; color: #f00; text-transform: uppercase; text-align: center; text-shadow: 0 0 10px rgba(255, 0, 0, 0.5); animation: glowTitle 2s infinite alternate; }
+        .signin h2 { font-size: 2.5em; color: #f00; text-transform: uppercase; text-align: center; text-shadow: 0 0 10px rgba(255, 0, 0, 0.5); animation: glowTitle 2s infinite alternate; }
         @keyframes glowTitle { 0% { text-shadow: 0 0 5px rgba(255, 0, 0, 0.5); } 100% { text-shadow: 0 0 20px rgba(255, 0, 0, 1); } }
-        .form-control { background: rgba(255, 255, 255, 0.1); border: none; color: #fff; transition: all 0.3s ease; }
-        .form-control:focus { background: rgba(255, 255, 255, 0.2); box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); color: #fff; }
-        .form-control::placeholder { color: rgba(255, 255, 255, 0.7); }
+        .dashboard p { font-size: 1.1em; animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .btn-warning, .btn-success, .btn-primary { margin-top: 10px; transition: all 0.3s ease; }
         .btn-warning:hover, .btn-success:hover, .btn-primary:hover { transform: scale(1.05); box-shadow: 0 0 10px rgba(255, 255, 255, 0.5); }
         .btn-warning { background: #f39c12; border: none; }
         .btn-success { background: #27ae60; border: none; }
         .btn-primary { background: #3498db; border: none; }
-        .dashboard p { font-size: 1.1em; animation: fadeIn 0.5s ease-in; color: #fff; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
     <div class="animated-bg"></div>
     <div class="signin">
         <div class="content">
-            <h3>Measurement Results</h3>
+            <h2>Smart BMI Library</h2>
             <div id="dashboard">
-                <p>Name: <span id="nameDisplay">--</span></p>
-                <p>Age: <span id="ageDisplay">--</span></p>
-                <p>Height: <span id="height">--</span> cm</p>
-                <p>Weight: <span id="weight">--</span> kg</p>
-                <p>BMI: <span id="bmi">--</span></p>
-                <p>Category: <span id="category">--</span></p>
+                <h3 class="text-white text-center">Measurement Results</h3>
+                <p class="text-white">Name: <span id="nameDisplay">--</span></p>
+                <p class="text-white">Age: <span id="ageDisplay">--</span></p>
+                <p class="text-white">Height: <span id="height">--</span> cm</p>
+                <p class="text-white">Weight: <span id="weight">--</span> kg</p>
+                <p class="text-white">BMI: <span id="bmi">--</span></p>
+                <p class="text-white">Category: <span id="category">--</span></p>
                 <button class="btn btn-warning w-100 mt-3" onclick="saveToFile()">Save Record</button>
                 <button class="btn btn-success w-100 mt-3" onclick="location.href='result.html'">View Detailed Insights</button>
                 <button class="btn btn-primary w-100 mt-3" onclick="resetForm()">Add Another Measurement</button>
@@ -50,43 +48,64 @@
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const measurement = JSON.parse(localStorage.getItem("latestMeasurement"));
-            if (measurement) {
-                const heightInMeters = measurement.height / 100;
-                const bmi = (measurement.weight / (heightInMeters * heightInMeters)).toFixed(1);
-                let category = "";
-                if (bmi < 18.5) category = "Underweight";
-                else if (bmi < 25) category = "Normal Weight";
-                else if (bmi < 30) category = "Overweight";
-                else category = "Obese";
+        let bmiMeasurements = JSON.parse(localStorage.getItem("bmiMeasurements")) || [];
 
-                document.getElementById("nameDisplay").textContent = measurement.name;
-                document.getElementById("ageDisplay").textContent = measurement.age;
-                document.getElementById("height").textContent = measurement.height;
-                document.getElementById("weight").textContent = measurement.weight;
-                document.getElementById("bmi").textContent = bmi;
-                document.getElementById("category").textContent = category;
+        document.addEventListener("DOMContentLoaded", function() {
+            const latest = bmiMeasurements[bmiMeasurements.length - 1];
+            if (latest) {
+                document.getElementById("nameDisplay").textContent = latest.name;
+                document.getElementById("ageDisplay").textContent = latest.age;
+                document.getElementById("height").textContent = latest.height;
+                document.getElementById("weight").textContent = latest.weight;
+                document.getElementById("bmi").textContent = latest.bmi;
+                document.getElementById("category").textContent = latest.category;
+                saveToExcel();
             }
         });
 
+        function saveToExcel() {
+            const latest = bmiMeasurements[bmiMeasurements.length - 1];
+            try {
+                const currentDate = new Date().toLocaleString();
+                const data = {
+                    date: currentDate,
+                    name: latest.name,
+                    age: parseInt(latest.age),
+                    height: parseFloat(latest.height),
+                    weight: parseFloat(latest.weight),
+                    bmi: parseFloat(latest.bmi)
+                };
+
+                fetch('http://localhost:3000/save-bmi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) console.log("Data saved to Excel successfully");
+                    else throw new Error(result.message);
+                })
+                .catch(error => console.error("Error sending data to server:", error));
+            } catch (error) {
+                console.error("Error in saveToExcel:", error);
+            }
+        }
+
         function saveToFile() {
-            const measurement = JSON.parse(localStorage.getItem("latestMeasurement"));
-            const bmi = document.getElementById("bmi").textContent;
-            const category = document.getElementById("category").textContent;
-            let data = `Smart BMI Library Record\n\nName: ${measurement.name}\nAge: ${measurement.age}\nHeight: ${measurement.height} cm\nWeight: ${measurement.weight} kg\nBMI: ${bmi}\nCategory: ${category}\n\nGenerated on: ${new Date().toLocaleString()}`;
+            const latest = bmiMeasurements[bmiMeasurements.length - 1];
+            let data = `Smart BMI Library Record\n\nName: ${latest.name}\nAge: ${latest.age}\nHeight: ${latest.height} cm\nWeight: ${latest.weight} kg\nBMI: ${latest.bmi}\nCategory: ${latest.category}\n\nGenerated on: ${new Date().toLocaleString()}`;
             let blob = new Blob([data], { type: "text/plain" });
             let link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = `BMI_Record_${measurement.name}_${Date.now()}.txt`;
+            link.download = `BMI_Record_${latest.name}_${Date.now()}.txt`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
 
         function resetForm() {
-            localStorage.removeItem("latestMeasurement");
-            window.location.href = "index_calculate.html";
+            window.location.href = 'index.html';
         }
     </script>
 </body>
